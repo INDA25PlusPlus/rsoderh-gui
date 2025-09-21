@@ -1,0 +1,8 @@
+[package]
+name = "rsoderh_gui"
+version = "0.1.0"
+edition = "2024"
+
+[dependencies]
+chess = { git = "https://github.com/INDA25PlusPlus/sofiefu-chess.git"}
+ggez = "0.9.3"
