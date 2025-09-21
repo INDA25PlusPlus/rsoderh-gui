@@ -2,6 +2,7 @@ use ggez::{GameError, GameResult, event, glam::Vec2, graphics};
 
 use crate::ui::MouseColors;
 
+pub mod chess_graphics;
 pub mod ui;
 
 pub struct MainState {
