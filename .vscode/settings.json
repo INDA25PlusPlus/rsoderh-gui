@@ -5,7 +5,11 @@
         "ggez",
         "libudev",
         "libxkbcommon",
+        "resvg",
         "rsoderh",
-        "sofiefu"
+        "sofiefu",
+        "tiny_skia",
+        "Unorm",
+        "usvg"
     ]
 }

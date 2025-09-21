@@ -6,3 +6,4 @@ edition = "2024"
 [dependencies]
 chess = { git = "https://github.com/INDA25PlusPlus/sofiefu-chess.git"}
 ggez = "0.9.3"
+resvg = "0.45.1"

@@ -1,17 +1,21 @@
 use ggez::{GameError, GameResult, event, glam::Vec2, graphics};
 
-use crate::ui::MouseColors;
+use crate::{assets::Assets, ui::MouseColors};
 
+mod assets;
+mod chess_game;
 pub mod chess_graphics;
 pub mod ui;
 
 pub struct MainState {
     buttons: Vec<ui::Button>,
+    assets: Assets,
 }
 
 impl MainState {
-    pub fn new() -> GameResult<MainState> {
+    pub fn new(ctx: &mut ggez::Context) -> GameResult<MainState> {
         let mut state = MainState {
+            assets: Assets::new(ctx),
             buttons: Vec::new(),
         };
 
