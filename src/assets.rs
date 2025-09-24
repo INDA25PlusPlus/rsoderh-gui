@@ -7,6 +7,17 @@ use resvg::{
 use crate::chess_game::PieceKind;
 use crate::chess_game::{self};
 
+macro_rules! load_png_unwrap {
+    ($path: expr, $ctx: expr $(,)?) => {
+        graphics::Image::from_bytes($ctx, include_bytes!($path)).expect(concat!(
+            "expect path '",
+            stringify!(path),
+            "' to contain a valid PNG"
+        ))
+    };
+}
+
+#[allow(unused_macros)]
 macro_rules! load_svg_unwrap {
     ($path: expr, $ctx: expr, $width: expr, $options: expr $(,)?) => {
         load_svg($ctx, include_bytes!($path), $width, $options).unwrap_or_else(|err| match err {
@@ -26,6 +37,7 @@ enum SvgLoadError {
     /// The `width` argument was equal to zero.
     ZeroWidth,
     SvgParse,
+    #[allow(dead_code)]
     Ggez(ggez::GameError),
 }
 
@@ -41,6 +53,7 @@ impl From<ggez::GameError> for SvgLoadError {
     }
 }
 
+#[allow(dead_code)]
 fn load_svg(
     ctx: &mut ggez::Context,
     data: &[u8],
@@ -101,27 +114,27 @@ pub struct Assets {
 
 impl Assets {
     pub fn new(ctx: &mut ggez::Context) -> Self {
-        let width = 512;
-        let options = usvg::Options::default();
+        // let width = 512;
+        // let options = usvg::Options::default();
 
         println!("Loading assets..");
 
         let assets = Self {
             white: ChessPieces {
-                pawn: load_svg_unwrap!("../assets/Chess_plt45.svg", ctx, width, &options),
-                knight: load_svg_unwrap!("../assets/Chess_nlt45.svg", ctx, width, &options),
-                bishop: load_svg_unwrap!("../assets/Chess_blt45.svg", ctx, width, &options),
-                rook: load_svg_unwrap!("../assets/Chess_rlt45.svg", ctx, width, &options),
-                queen: load_svg_unwrap!("../assets/Chess_qlt45.svg", ctx, width, &options),
-                king: load_svg_unwrap!("../assets/Chess_klt45.svg", ctx, width, &options),
+                pawn: load_png_unwrap!("../assets/pieces/pw.png", ctx),
+                knight: load_png_unwrap!("../assets/pieces/nw.png", ctx),
+                bishop: load_png_unwrap!("../assets/pieces/bw.png", ctx),
+                rook: load_png_unwrap!("../assets/pieces/rw.png", ctx),
+                queen: load_png_unwrap!("../assets/pieces/qw.png", ctx),
+                king: load_png_unwrap!("../assets/pieces/kw.png", ctx),
             },
             black: ChessPieces {
-                pawn: load_svg_unwrap!("../assets/Chess_pdt45.svg", ctx, width, &options),
-                knight: load_svg_unwrap!("../assets/Chess_ndt45.svg", ctx, width, &options),
-                bishop: load_svg_unwrap!("../assets/Chess_bdt45.svg", ctx, width, &options),
-                rook: load_svg_unwrap!("../assets/Chess_rdt45.svg", ctx, width, &options),
-                queen: load_svg_unwrap!("../assets/Chess_qdt45.svg", ctx, width, &options),
-                king: load_svg_unwrap!("../assets/Chess_kdt45.svg", ctx, width, &options),
+                pawn: load_png_unwrap!("../assets/pieces/pb.png", ctx),
+                knight: load_png_unwrap!("../assets/pieces/nb.png", ctx),
+                bishop: load_png_unwrap!("../assets/pieces/bb.png", ctx),
+                rook: load_png_unwrap!("../assets/pieces/rb.png", ctx),
+                queen: load_png_unwrap!("../assets/pieces/qb.png", ctx),
+                king: load_png_unwrap!("../assets/pieces/kb.png", ctx),
             },
         };
 
