@@ -1,47 +1,37 @@
+use std::sync::Arc;
+
 use ggez::{GameError, GameResult, event, glam::Vec2, graphics};
 
-use crate::{assets::Assets, ui::MouseColors};
+use crate::{assets::Assets, chess_game::Game};
 
 mod assets;
 mod chess_game;
 pub mod chess_graphics;
+pub mod palette;
 pub mod ui;
 
 pub struct MainState {
-    buttons: Vec<ui::Button>,
-    assets: Assets,
+    game: Game,
+    // assets: Arc<Assets>,
 }
 
 impl MainState {
     pub fn new(ctx: &mut ggez::Context) -> GameResult<MainState> {
-        let mut state = MainState {
-            assets: Assets::new(ctx),
-            buttons: Vec::new(),
+        let assets = Arc::new(Assets::new(ctx));
+        let state = MainState {
+            game: Game::new(
+                graphics::Rect {
+                    x: 10.0,
+                    y: 10.0,
+                    w: 100.0 * 64.0,
+                    h: 100.0 * 64.0,
+                },
+                &assets,
+            ),
+            // assets,
         };
 
-        state.add_button(ui::Button::new(
-            graphics::Rect {
-                x: 10.0,
-                y: 10.0,
-                w: 150.0,
-                h: 100.0,
-            },
-            ui::RoundedButton::new(
-                10.0,
-                MouseColors::new(
-                    graphics::Color::from_rgb_u32(0x22211E),
-                    graphics::Color::from_rgb_u32(0x393734),
-                    graphics::Color::from_rgb_u32(0x1b1a18),
-                ),
-                || println!("Clicked!"),
-            ),
-        ));
-
         Ok(state)
-    }
-
-    pub fn add_button(&mut self, button: ui::Button) {
-        self.buttons.push(button);
     }
 
     fn mouse_left_button_event(
@@ -56,11 +46,8 @@ impl MainState {
             return;
         }
 
-        for button in self.buttons.iter_mut().rev() {
-            if button.update_with_press_state(Vec2::new(x, y), press_state) {
-                break;
-            }
-        }
+        self.game
+            .update_with_press_state(Vec2::new(x, y), press_state);
     }
 }
 
@@ -72,9 +59,7 @@ impl event::EventHandler<GameError> for MainState {
     fn draw(&mut self, ctx: &mut ggez::Context) -> GameResult<()> {
         let mut canvas = graphics::Canvas::from_frame(ctx, graphics::Color::from_rgb_u32(0x2E2B28));
 
-        for button in &mut self.buttons {
-            button.draw(ctx, &mut canvas)?;
-        }
+        self.game.draw(ctx, &mut canvas)?;
 
         canvas.finish(ctx)
     }
@@ -107,9 +92,7 @@ impl event::EventHandler<GameError> for MainState {
         _dx: f32,
         _dy: f32,
     ) -> Result<(), GameError> {
-        for button in &mut self.buttons {
-            button.update_with_mouse_position(Vec2::new(x, y));
-        }
+        self.game.update_with_mouse_position(Vec2::new(x, y));
         Ok(())
     }
 }

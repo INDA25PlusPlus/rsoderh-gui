@@ -39,9 +39,9 @@ impl MouseColors {
     }
 }
 
-pub trait SpecificButton {
+pub trait ButtonSpecialization {
     fn draw(
-        &mut self,
+        &self,
         ctx: &mut Context,
         canvas: &mut graphics::Canvas,
         bounds: Rect,
@@ -55,11 +55,11 @@ pub struct Button {
     bounds: Rect,
     press_state: PressState,
     hovered: bool,
-    button: Box<dyn SpecificButton>,
+    button: Box<dyn ButtonSpecialization>,
 }
 
 impl Button {
-    pub fn new(bounds: Rect, button: impl SpecificButton + 'static) -> Self {
+    pub fn new(bounds: Rect, button: impl ButtonSpecialization + 'static) -> Self {
         Self {
             bounds,
             press_state: PressState::Released,
@@ -78,7 +78,7 @@ impl Button {
         self.hovered
     }
 
-    pub fn draw(&mut self, ctx: &mut Context, canvas: &mut graphics::Canvas) -> GameResult {
+    pub fn draw(&self, ctx: &mut Context, canvas: &mut graphics::Canvas) -> GameResult {
         self.button
             .draw(ctx, canvas, self.bounds, self.press_state, self.hovered)
     }
@@ -117,16 +117,14 @@ impl RoundedButton {
         Self {
             radius,
             colors,
-            // press_state: PressState::Released,
-            // hovered: false,
             on_press: Box::new(on_press),
         }
     }
 }
 
-impl SpecificButton for RoundedButton {
+impl ButtonSpecialization for RoundedButton {
     fn draw(
-        &mut self,
+        &self,
         ctx: &mut Context,
         canvas: &mut graphics::Canvas,
         bounds: Rect,
