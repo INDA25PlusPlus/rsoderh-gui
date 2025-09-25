@@ -6,8 +6,14 @@ use crate::{
     assets::Assets,
     chess_graphics::{BorderRadii, RoundedRectangle, SizedImage},
     palette::PALETTE,
+    rect::RectUtils,
     ui::{self, ButtonSpecialization, PressState},
 };
+
+/// Corner radius of the board.
+static BOARD_CORNER_RADIUS: f32 = 15.0;
+/// Distance from the board top edge to the screen edge.
+static BOARD_Y_MARGIN: f32 = 40.0;
 
 /// Represents a coordinate on a chess board. Wrapper around u8 guaranteed to be within 0..8
 /// (exclusive).
@@ -176,15 +182,16 @@ impl ButtonSpecialization for Square {
         &self,
         ctx: &mut Context,
         canvas: &mut graphics::Canvas,
-        bounds: graphics::Rect,
+        offset: glam::Vec2,
+        mut bounds: graphics::Rect,
         press_state: PressState,
         hovered: bool,
     ) -> GameResult {
-        static BOARD_CORNER_RADIUS: f32 = 15.0;
         // // let game = self.game.lock().unwrap();
         // // game.at(self.position);
         // // let mesh =
         // // self.game.get_mut();
+        bounds.translate(offset);
 
         let to_actual_color = move |square_color: Color| match square_color {
             Color::White => match press_state {
@@ -361,7 +368,6 @@ impl ButtonSpecialization for Square {
     }
 
     fn on_press(&mut self) {
-        println!("Pressed {:?}", self.position);
         self.state.borrow_mut().select_square(self.position);
     }
 }
@@ -532,15 +538,24 @@ impl GameState {
 }
 
 pub struct GameUi {
-    _state: Arc<RefCell<GameState>>,
-    components: [ui::Button; 64],
+    state: Arc<RefCell<GameState>>,
+    board_bounds: graphics::Rect,
+    square_buttons: [ui::Button; 64],
+    white_label: graphics::Text,
+    black_label: graphics::Text,
 }
 
 impl GameUi {
-    pub fn new(bounds: graphics::Rect, assets: &Arc<Assets>) -> Self {
+    pub fn new(_ctx: &mut Context, top_left: glam::Vec2, assets: &Arc<Assets>) -> GameResult<Self> {
         let state = Arc::new(RefCell::new(GameState::new(BoardWrapper::new(
             chess::game::game_state::new(),
         ))));
+        let board_bounds = graphics::Rect {
+            x: top_left.x,
+            y: top_left.y + BOARD_Y_MARGIN,
+            w: 100.0 * 8.0,
+            h: 100.0 * 8.0,
+        };
         let state_ref = &state;
         let components: Box<[_; 64]> = std::iter::repeat_n(0..8, 8)
             .enumerate()
@@ -553,8 +568,8 @@ impl GameUi {
                     let position_indices =
                         (glam::vec2(0.0, 7.0) - position_indices) * glam::vec2(-1.0, 1.0);
 
-                    let mut square_bounds = bounds.clone();
-                    square_bounds.scale(1.0 / 64.0, 1.0 / 64.0);
+                    let mut square_bounds = board_bounds.clone();
+                    square_bounds.scale(1.0 / 8.0, 1.0 / 8.0);
 
                     let square_size: glam::Vec2 = square_bounds.size().into();
                     square_bounds.translate(position_indices * square_size);
@@ -570,10 +585,54 @@ impl GameUi {
             .ok()
             .expect("there are 64 position");
 
-        Self {
-            _state: state,
-            components: *components,
-        }
+        let mut white_label = graphics::Text::new("White");
+        white_label.set_scale(graphics::PxScale::from(35.0));
+        // .set_bounds(glam::vec2(board_bounds.w, BOARD_Y_MARGIN))
+        // .set_layout(graphics::TextLayout {
+        //     h_align: graphics::TextAlign::Begin,
+        //     v_align: graphics::TextAlign::Middle,
+        // });
+        let mut black_label = graphics::Text::new("Black");
+        black_label.set_scale(graphics::PxScale::from(35.0));
+        // .set_bounds(glam::vec2(board_bounds.w, BOARD_Y_MARGIN))
+        // .set_layout(graphics::TextLayout {
+        //     h_align: graphics::TextAlign::Begin,
+        //     v_align: graphics::TextAlign::Middle,
+        // });
+        // let white_label = TextLabel::new(
+        //     ctx,
+        //     "White",
+        //     glam::vec2(
+        //         bounds.left(),
+        //         bounds.top() + BOARD_Y_OFFSET - BOARD_Y_OFFSET / 2.0,
+        //     ),
+        //     bounds.w,
+        //     10.0,
+        //     BOARD_CORNER_RADIUS,
+        //     PALETTE.button,
+        //     graphics::Color::WHITE,
+        // )?;
+        // let black_label = TextLabel::new(
+        //     ctx,
+        //     "Black",
+        //     glam::vec2(
+        //         bounds.left(),
+        //         bounds.bottom() + BOARD_Y_OFFSET + BOARD_Y_OFFSET / 2.0,
+        //     ),
+        //     bounds.w,
+        //     10.0,
+        //     BOARD_CORNER_RADIUS,
+        //     PALETTE.button,
+        //     graphics::Color::WHITE,
+        // )?;
+
+        Ok(Self {
+            state,
+            square_buttons: *components,
+            white_label,
+            black_label,
+            board_bounds,
+        })
     }
 
     pub fn update_with_press_state(
@@ -581,7 +640,7 @@ impl GameUi {
         position: glam::Vec2,
         press_state: PressState,
     ) -> bool {
-        for button in self.components.iter_mut() {
+        for button in self.square_buttons.iter_mut() {
             if button.update_with_press_state(position, press_state) {
                 return true;
             }
@@ -591,15 +650,99 @@ impl GameUi {
     }
 
     pub fn update_with_mouse_position(&mut self, position: glam::Vec2) {
-        for button in self.components.iter_mut() {
+        for button in self.square_buttons.iter_mut() {
             button.update_with_mouse_position(position);
         }
     }
 
-    pub fn draw(&self, ctx: &mut Context, canvas: &mut graphics::Canvas) -> GameResult {
-        for component in &self.components {
-            component.draw(ctx, canvas)?;
+    pub fn draw(
+        &self,
+        ctx: &mut Context,
+        canvas: &mut graphics::Canvas,
+        offset: glam::Vec2,
+    ) -> GameResult {
+        // Draw board squares.
+        for component in &self.square_buttons {
+            component.draw(ctx, canvas, offset)?;
         }
+
+        // ctx.gfx.window().scale_factor()
+
+        Self::size();
+
+        // Draw player labels.
+        canvas.draw(
+            &self.black_label,
+            graphics::DrawParam::new()
+                .dest(self.board_bounds.top_left() + glam::vec2(10.0, -35.0 - 5.0) + offset)
+                .color(PALETTE.board_square_black),
+        );
+        canvas.draw(
+            &self.white_label,
+            graphics::DrawParam::new()
+                .dest(self.board_bounds.bottom_left() + glam::vec2(10.0, 5.0 + 3.0) + offset)
+                .color(PALETTE.board_square_white),
+        );
+
+        let side_bar_bounds = graphics::Rect {
+            x: self.board_bounds.right(),
+            y: self.board_bounds.top(),
+            w: 300.0,
+            h: self.board_bounds.h,
+        };
+        static SIDE_BAR_TOP_MARGIN: f32 = 30.0;
+
+        // Draw turn display.
+        let (turn_str, turn_color) = match self.state.borrow().board.turn() {
+            Color::White => ("White", PALETTE.board_square_white),
+            Color::Black => ("Black", PALETTE.board_square_black),
+        };
+        let mut turn_text = graphics::Text::new(turn_str);
+        turn_text
+            .set_scale(graphics::PxScale::from(80.0))
+            .set_layout(graphics::TextLayout {
+                h_align: graphics::TextAlign::Middle,
+                v_align: graphics::TextAlign::Begin,
+            });
+
+        canvas.draw(
+            &turn_text,
+            graphics::DrawParam::new().color(turn_color).dest(
+                glam::vec2(
+                    side_bar_bounds.center().x,
+                    side_bar_bounds.top() + SIDE_BAR_TOP_MARGIN,
+                ) + offset,
+            ),
+        );
+
+        let mut subtitle_text = graphics::Text::new("to move");
+        subtitle_text
+            .set_scale(graphics::PxScale::from(30.0))
+            .set_layout(graphics::TextLayout {
+                h_align: graphics::TextAlign::Middle,
+                v_align: graphics::TextAlign::Begin,
+            });
+
+        canvas.draw(
+            &subtitle_text,
+            graphics::DrawParam::new().color(PALETTE.text_subtle).dest(
+                glam::vec2(
+                    side_bar_bounds.center().x,
+                    side_bar_bounds.top() + SIDE_BAR_TOP_MARGIN + 80.0,
+                ) + offset,
+            ),
+        );
+
         Ok(())
+    }
+
+    pub fn size() -> glam::Vec2 {
+        /// If I don't add this to the height the text at the bottom is cut off slightly, and I
+        /// can't be bothered to fix it.
+        static MAGIC_EXTRA_HEIGHT: f32 = 20.0;
+        glam::vec2(
+            800.0 + 300.0,
+            800.0 + BOARD_Y_MARGIN * 2.0 + MAGIC_EXTRA_HEIGHT,
+        )
     }
 }

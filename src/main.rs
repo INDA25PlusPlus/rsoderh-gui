@@ -1,11 +1,14 @@
 use ggez::{conf, event};
 
-use rsoderh_gui::MainState;
+use rsoderh_gui::{MainState, chess_game::GameUi};
 
 pub fn main() -> ggez::GameResult {
+    let min_size = GameUi::size();
     let cb = ggez::ContextBuilder::new("rsoderh_chess_gui", "ggez").window_mode(conf::WindowMode {
-        width: 1200.0,
-        height: 1000.0,
+        width: min_size.x,
+        height: min_size.y,
+        resizable: true,
+        // resize_on_scale_factor_change: true,
         ..Default::default()
     });
     let (mut ctx, event_loop) = cb.build()?;

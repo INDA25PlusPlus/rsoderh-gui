@@ -1,6 +1,6 @@
 use ggez::{
     Context, GameResult,
-    glam::Vec2,
+    glam::{self, Vec2},
     graphics::{self, Rect},
 };
 
@@ -44,6 +44,7 @@ pub trait ButtonSpecialization {
         &self,
         ctx: &mut Context,
         canvas: &mut graphics::Canvas,
+        offset: glam::Vec2,
         bounds: Rect,
         press_state: PressState,
         hovered: bool,
@@ -78,9 +79,20 @@ impl Button {
         self.hovered
     }
 
-    pub fn draw(&self, ctx: &mut Context, canvas: &mut graphics::Canvas) -> GameResult {
-        self.button
-            .draw(ctx, canvas, self.bounds, self.press_state, self.hovered)
+    pub fn draw(
+        &self,
+        ctx: &mut Context,
+        canvas: &mut graphics::Canvas,
+        offset: glam::Vec2,
+    ) -> GameResult {
+        self.button.draw(
+            ctx,
+            canvas,
+            offset,
+            self.bounds,
+            self.press_state,
+            self.hovered,
+        )
     }
 
     pub fn on_press(&mut self) {
@@ -127,6 +139,7 @@ impl ButtonSpecialization for RoundedButton {
         &self,
         ctx: &mut Context,
         canvas: &mut graphics::Canvas,
+        offset: glam::Vec2,
         bounds: Rect,
         press_state: PressState,
         hovered: bool,
@@ -139,7 +152,7 @@ impl ButtonSpecialization for RoundedButton {
             self.colors.get(hovered, press_state),
         )?;
 
-        canvas.draw(&rect, graphics::DrawParam::new());
+        canvas.draw(&rect, graphics::DrawParam::new().dest(offset));
 
         Ok(())
     }

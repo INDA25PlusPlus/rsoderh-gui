@@ -1,6 +1,6 @@
 //! Collection of types which implement `ggez::graphics::Drawable`.
 
-use ggez::{GameResult, context, glam, graphics};
+use ggez::{GameResult, context, glam, graphics, mint};
 
 /// Image with a fixed rendered size. So the rendered size does not depend on the source image
 /// dimensions.
@@ -153,5 +153,81 @@ impl graphics::Drawable for RoundedRectangle {
         for mesh in &self.meshes {
             canvas.draw(mesh, param);
         }
+    }
+}
+
+pub struct TextLabel {
+    bounds: graphics::Rect,
+    background: graphics::Mesh,
+    text: graphics::Text,
+    text_color: graphics::Color,
+    text_center: mint::Point2<f32>,
+}
+
+impl TextLabel {
+    pub fn new(
+        gfx: &impl context::Has<graphics::GraphicsContext>,
+        text: &str,
+        left_center: glam::Vec2,
+        width: f32,
+        margin: f32,
+        corner_radius: f32,
+        bg_color: graphics::Color,
+        text_color: graphics::Color,
+    ) -> GameResult<Self> {
+        let mut text_mesh = graphics::Text::new(text);
+        // TODO: Maybe don't hardcode font size.
+        text_mesh.set_scale(graphics::PxScale::from(30.0));
+        let text_dimension = text_mesh.measure(gfx)?;
+        let narrow_width = text_dimension.x + margin * 2.0;
+        let height = text_dimension.y + margin * 2.0;
+
+        let mut bounds = graphics::Rect::new(
+            left_center.x,
+            left_center.y - height / 2.0,
+            narrow_width,
+            height,
+        );
+        text_mesh
+            .set_bounds(bounds.size())
+            .set_layout(graphics::TextLayout::center());
+        let text_center = bounds.center();
+
+        bounds.w = width;
+
+        let background = graphics::Mesh::new_rounded_rectangle(
+            gfx,
+            graphics::DrawMode::fill(),
+            bounds,
+            corner_radius,
+            bg_color,
+        )?;
+
+        Ok(Self {
+            bounds,
+            background,
+            text: text_mesh,
+            text_color,
+            text_center,
+        })
+    }
+}
+
+impl graphics::Drawable for TextLabel {
+    fn dimensions(
+        &self,
+        _gfx: &impl context::Has<graphics::GraphicsContext>,
+    ) -> Option<graphics::Rect> {
+        Some(self.bounds)
+    }
+
+    fn draw(&self, canvas: &mut graphics::Canvas, _param: impl Into<graphics::DrawParam>) {
+        canvas.draw(&self.background, graphics::DrawParam::new());
+        canvas.draw(
+            &self.text,
+            graphics::DrawParam::new()
+                .dest(self.text_center)
+                .color(self.text_color),
+        );
     }
 }
