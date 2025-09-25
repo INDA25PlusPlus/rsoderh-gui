@@ -2,7 +2,7 @@ use std::sync::Arc;
 
 use ggez::{GameError, GameResult, event, glam::Vec2, graphics};
 
-use crate::{assets::Assets, chess_game::Game};
+use crate::{assets::Assets, chess_game::GameUi};
 
 mod assets;
 mod chess_game;
@@ -11,7 +11,7 @@ pub mod palette;
 pub mod ui;
 
 pub struct MainState {
-    game: Game,
+    game: GameUi,
     // assets: Arc<Assets>,
 }
 
@@ -19,7 +19,7 @@ impl MainState {
     pub fn new(ctx: &mut ggez::Context) -> GameResult<MainState> {
         let assets = Arc::new(Assets::new(ctx));
         let state = MainState {
-            game: Game::new(
+            game: GameUi::new(
                 graphics::Rect {
                     x: 10.0,
                     y: 10.0,

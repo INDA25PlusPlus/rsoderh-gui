@@ -1,4 +1,4 @@
-use std::{fmt::Debug, sync::Arc};
+use std::{cell::RefCell, fmt::Debug, sync::Arc};
 
 use ggez::{Context, GameResult, glam, graphics, mint};
 
@@ -157,15 +157,15 @@ pub struct Piece {
 
 struct Square {
     position: Position,
-    board: Arc<BoardWrapper>,
+    state: Arc<RefCell<GameState>>,
     assets: Arc<Assets>,
 }
 
 impl Square {
-    pub fn new(position: Position, board: Arc<BoardWrapper>, assets: Arc<Assets>) -> Self {
+    pub fn new(position: Position, state: Arc<RefCell<GameState>>, assets: Arc<Assets>) -> Self {
         Self {
             position,
-            board,
+            state,
             assets,
         }
     }
@@ -227,6 +227,7 @@ impl ButtonSpecialization for Square {
             _ => BorderRadii::zero(),
         };
 
+        // Draw bg tile.
         let mesh = RoundedRectangle::new(
             ctx,
             graphics::DrawMode::fill(),
@@ -236,26 +237,38 @@ impl ButtonSpecialization for Square {
         )?;
         canvas.draw(&mesh, graphics::DrawParam::new());
 
-        let label_string = match (self.position.column(), self.position.row()) {
-            (0, row) => Some(format!("{}", row + 1)),
-            (column, 0) => Some(format!(
+        // Draw label text.
+        if self.position.column() == 0 {
+            // Showing row number
+            let string = format!("{}", self.position.row() + 1);
+
+            // Note: that last offset is arbitrary
+            let position = glam::vec2(bounds.x + 15.0, bounds.y + 15.0 + 6.0);
+
+            let mut text = graphics::Text::new(string);
+            // TODO: Choose font. See ggez text example for how to load it.
+            text.set_scale(30.0)
+                .set_bounds(glam::vec2(30.0, 30.0))
+                .set_layout(graphics::TextLayout::center());
+
+            canvas.draw(
+                &text,
+                graphics::DrawParam::new()
+                    .dest(position)
+                    .color(to_actual_color(square_color.opposite())),
+            );
+        }
+        if self.position.row() == 0 {
+            // Showing column number
+            let string = format!(
                 "{}",
-                char::from_digit(column as u32 + 10, 20).expect("surely my math works")
-            )),
-            _ => None,
-        };
+                char::from_digit(self.position.column() as u32 + 10, 20)
+                    .expect("surely my math works")
+            );
 
-        if let Some(label_string) = label_string {
-            let position = if self.position.column() == 0 {
-                // Showing row number
-                // Note: that last offset is arbitrary
-                glam::vec2(bounds.x + 15.0, bounds.y + 15.0 + 6.0)
-            } else {
-                // Showing column number
-                glam::vec2(bounds.right() - 15.0, bounds.bottom() - 15.0)
-            };
+            let position = glam::vec2(bounds.right() - 15.0, bounds.bottom() - 15.0);
 
-            let mut text = graphics::Text::new(label_string);
+            let mut text = graphics::Text::new(string);
             // TODO: Choose font. See ggez text example for how to load it.
             text.set_scale(30.0)
                 .set_bounds(glam::vec2(30.0, 30.0))
@@ -269,7 +282,68 @@ impl ButtonSpecialization for Square {
             );
         }
 
-        if let Some(piece) = self.board.at(self.position) {
+        // Draw highlight if selected.
+        if self
+            .state
+            .borrow()
+            .last_move
+            .into_iter()
+            .map(|(source, dest)| [source, dest])
+            .flatten()
+            .chain(match self.state.borrow().phase {
+                GamePhase::SelectDest(source) => Some(source),
+                _ => None,
+            })
+            .any(|square| self.position == square)
+        {
+            let mut color = PALETTE.board_square_selected;
+            color.a = 0.7;
+            let mesh = RoundedRectangle::new(
+                ctx,
+                graphics::DrawMode::fill(),
+                bounds,
+                corner_radii,
+                color,
+            )?;
+            canvas.draw(&mesh, graphics::DrawParam::new());
+        }
+
+        // Draw potential destination highlight.
+        let phase = self.state.borrow().phase;
+        let is_potential_dest = phase.source_square().is_some_and(|source| {
+            self.state
+                .borrow_mut()
+                .board
+                .valid_moves(source)
+                .any(|dest| self.position == dest)
+        });
+        if is_potential_dest {
+            let mesh = if self.state.borrow().board.at(self.position).is_some() {
+                // Square is occupied.
+                graphics::Mesh::new_circle(
+                    ctx,
+                    graphics::DrawMode::stroke(10.0),
+                    bounds.center(),
+                    bounds.w / 2.0 - 5.0,
+                    0.001,
+                    PALETTE.highlight_subtle_overlay,
+                )?
+            } else {
+                // Square is empty.
+                graphics::Mesh::new_circle(
+                    ctx,
+                    graphics::DrawMode::fill(),
+                    bounds.center(),
+                    20.0,
+                    0.001,
+                    PALETTE.highlight_subtle_overlay,
+                )?
+            };
+            canvas.draw(&mesh, graphics::DrawParam::new());
+        }
+
+        // Draw piece graphic.
+        if let Some(piece) = self.state.borrow().board.at(self.position) {
             static PIECE_SCALE: f32 = 0.9;
 
             let mut piece_bounds = bounds.clone();
@@ -288,7 +362,23 @@ impl ButtonSpecialization for Square {
 
     fn on_press(&mut self) {
         println!("Pressed {:?}", self.position);
+        self.state.borrow_mut().select_square(self.position);
     }
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MoveOutcome {
+    Valid,
+    Check,
+    Checkmate,
+}
+
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+pub enum MoveError {
+    BadCoordinates,
+    WrongPlayer,
+    Invalid,
+    Checked,
 }
 
 /// Wrapper around `chess::chess::game::game_state`.
@@ -331,16 +421,126 @@ impl BoardWrapper {
             },
         })
     }
+
+    pub fn turn(&self) -> Color {
+        match self.0.turn {
+            'w' => Color::White,
+            'b' => Color::Black,
+            _ => unreachable!(),
+        }
+    }
+
+    pub fn valid_moves(&mut self, square: Position) -> impl Iterator<Item = Position> {
+        self.0
+            .valid_moves(square.row() as i32 + 1, square.column() as i32 + 1)
+            .into_iter()
+            .map(|(row, column)| {
+                Position::new(column as u8 - 1, row as u8 - 1)
+                    .expect("library returns valid positions")
+            })
+    }
+
+    pub fn make_move(
+        &mut self,
+        source: Position,
+        dest: Position,
+    ) -> Result<MoveOutcome, MoveError> {
+        use chess::outcome::Outcome;
+        match self.0.make_move(
+            source.row() as i32 + 1,
+            source.column() as i32 + 1,
+            dest.row() as i32 + 1,
+            dest.column() as i32 + 1,
+        ) {
+            Outcome::Valid => Ok(MoveOutcome::Valid),
+            Outcome::Check => Ok(MoveOutcome::Check),
+            Outcome::Checkmate => Ok(MoveOutcome::Checkmate),
+            Outcome::Bad_coordinates => Err(MoveError::BadCoordinates),
+            Outcome::Wrong_player => Err(MoveError::WrongPlayer),
+            Outcome::Invalid => Err(MoveError::Invalid),
+            Outcome::Checked => Err(MoveError::Checked),
+        }
+    }
 }
 
-pub struct Game {
-    _state: Arc<BoardWrapper>,
+/// The phase of an ongoing turn, or if the game isn't active (TODO: implement game over state).
+#[derive(Clone, Copy, PartialEq, Eq, Debug)]
+enum GamePhase {
+    SelectSource,
+    /// When a piece is being moved and a source square has been selected.
+    SelectDest(Position),
+}
+
+impl GamePhase {
+    pub fn source_square(&self) -> Option<Position> {
+        match self {
+            Self::SelectDest(square) => Some(*square),
+            _ => None,
+        }
+    }
+}
+
+struct GameState {
+    pub board: BoardWrapper,
+    /// When a piece is being moved, this contains the coordinates of the square which was selected
+    /// as the source.
+    /// Information about the last half move. Contains the source and destination squares.
+    pub last_move: Option<(Position, Position)>,
+    pub phase: GamePhase,
+}
+
+impl GameState {
+    pub fn new(board: BoardWrapper) -> Self {
+        Self {
+            board,
+            last_move: None,
+            phase: GamePhase::SelectSource,
+        }
+    }
+
+    pub fn select_square(&mut self, square: Position) {
+        match self.phase {
+            GamePhase::SelectSource => {
+                if self
+                    .board
+                    .at(square)
+                    .is_none_or(|piece| piece.color != self.board.turn())
+                {
+                    return;
+                }
+
+                self.phase = GamePhase::SelectDest(square);
+            }
+            GamePhase::SelectDest(source) => {
+                match self.board.make_move(source, square) {
+                    Err(error) => {
+                        // Interrpret as canceling the move.
+                        println!("Invalid move: {:?}", error);
+
+                        self.phase = GamePhase::SelectSource;
+                    }
+                    Ok(outcome) => {
+                        dbg!(outcome);
+
+                        self.last_move = Some((source, square));
+                        self.phase = GamePhase::SelectSource;
+                    }
+                }
+            }
+        }
+    }
+}
+
+pub struct GameUi {
+    _state: Arc<RefCell<GameState>>,
     components: [ui::Button; 64],
 }
 
-impl Game {
+impl GameUi {
     pub fn new(bounds: graphics::Rect, assets: &Arc<Assets>) -> Self {
-        let state = Arc::new(BoardWrapper::new(chess::game::game_state::new()));
+        let state = Arc::new(RefCell::new(GameState::new(BoardWrapper::new(
+            chess::game::game_state::new(),
+        ))));
         let state_ref = &state;
         let components: Box<[_; 64]> = std::iter::repeat_n(0..8, 8)
             .enumerate()
