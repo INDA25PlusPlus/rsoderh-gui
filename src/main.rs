@@ -10,6 +10,9 @@ pub fn main() -> ggez::GameResult {
         resizable: true,
         // resize_on_scale_factor_change: true,
         ..Default::default()
+    }).window_setup(conf::WindowSetup {
+        title: "Rsoderh Chess".to_owned(),
+        ..Default::default()
     });
     let (mut ctx, event_loop) = cb.build()?;
     let state = MainState::new(&mut ctx)?;
