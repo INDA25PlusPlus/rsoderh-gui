@@ -12,6 +12,7 @@ use crate::{assets::Assets, chess_game::GameUi};
 mod assets;
 pub mod chess_game;
 pub mod chess_graphics;
+mod network;
 pub mod palette;
 mod rect;
 pub mod ui;

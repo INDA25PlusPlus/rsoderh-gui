@@ -155,7 +155,7 @@ pub enum PieceKind {
     King,
 }
 
-#[derive(Clone, Copy, PartialEq, Eq, Hash)]
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub struct Piece {
     pub kind: PieceKind,
     pub color: Color,
