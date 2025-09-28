@@ -84,7 +84,7 @@ impl Position {
 
     /// Parse Position from string like "a1". Is case insensitive.
     /// ```
-    /// use rsoderh_chess::Position;
+    /// use rsoderh_gui::chess_game::Position;
     ///
     /// assert_eq!(Position::parse("a1").unwrap(), Position::new(0, 0).unwrap());
     /// ```
