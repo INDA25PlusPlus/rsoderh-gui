@@ -173,3 +173,86 @@ fn message_parse_move_promotion() {
         }))
     )
 }
+
+#[test]
+fn message_serialize_move_ongoing() {
+    let message = Message::Move(MoveMessage {
+        source: Position::parse("e2").unwrap(),
+        dest: Position::parse("e4").unwrap(),
+        promotion: None,
+        phase: GamePhase::Ongoing,
+        board: chess::game::game_state::new().into(),
+    });
+
+    assert_eq!(Message::parse_from(&message.serialize()), Ok(message),)
+}
+
+#[test]
+fn message_serialize_move_white_win() {
+    let message = Message::Move(MoveMessage {
+        source: Position::parse("e2").unwrap(),
+        dest: Position::parse("e4").unwrap(),
+        promotion: None,
+        phase: GamePhase::WhiteWin,
+        board: chess::game::game_state::new().into(),
+    });
+
+    assert_eq!(Message::parse_from(&message.serialize()), Ok(message),)
+}
+
+#[test]
+fn message_serialize_move_black_win() {
+    let message = Message::Move(MoveMessage {
+        source: Position::parse("e2").unwrap(),
+        dest: Position::parse("e4").unwrap(),
+        promotion: None,
+        phase: GamePhase::BlackWin,
+        board: chess::game::game_state::new().into(),
+    });
+
+    assert_eq!(Message::parse_from(&message.serialize()), Ok(message),)
+}
+
+#[test]
+fn message_serialize_move_draw() {
+    let message = Message::Move(MoveMessage {
+        source: Position::parse("e2").unwrap(),
+        dest: Position::parse("e4").unwrap(),
+        promotion: None,
+        phase: GamePhase::Draw,
+        board: chess::game::game_state::new().into(),
+    });
+
+    assert_eq!(Message::parse_from(&message.serialize()), Ok(message),)
+}
+
+#[test]
+fn message_serialize_move_empty_board() {
+    let message = Message::Move(MoveMessage {
+        source: Position::parse("e2").unwrap(),
+        dest: Position::parse("e4").unwrap(),
+        promotion: None,
+        phase: GamePhase::Draw,
+        board: Board::new_empty(),
+    });
+
+    assert_eq!(Message::parse_from(&message.serialize()), Ok(message),)
+}
+
+#[test]
+fn message_serialize_quit_empty() {
+    let message = Message::Quit(QuitMessage {
+        message: "".to_owned(),
+    });
+
+    assert_eq!(Message::parse_from(&message.serialize()), Ok(message),)
+}
+
+#[test]
+fn message_serialize_quit_unicode() {
+    let message = Message::Quit(QuitMessage {
+        message: "I need hëlp =( 🇸🇪".to_owned(),
+    });
+
+    assert_eq!(Message::parse_from(&message.serialize()), Ok(message),)
+}

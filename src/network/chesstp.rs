@@ -5,6 +5,8 @@
 use core::str;
 use std::str::{FromStr, Utf8Error};
 
+use itertools::Itertools;
+
 use crate::chess_game::{Color, Piece, PieceKind, Position};
 
 mod tests;
@@ -196,6 +198,48 @@ impl Board {
         game.board = self.board;
         game.player = self.player;
     }
+
+    pub fn serialize(&self) -> String {
+        (0..8)
+            .rev()
+            .map(|row_index| {
+                (0..8)
+                    .map(move |column_index| {
+                        let tile =
+                            Position::new(column_index, row_index).expect("Indices are in 0..8");
+
+                        (1, self.tile(tile))
+                    })
+                    .coalesce(|previous, current| {
+                        if previous.1.is_none() && current.1.is_none() {
+                            Ok((previous.0 + current.0, None))
+                        } else {
+                            Err((previous, current))
+                        }
+                    })
+                    .map(|(count, tile)| match tile {
+                        None => char::from_digit(count, 10)
+                            .expect("there can't be more than 8 consecutive None values"),
+                        Some(Piece { kind, color }) => {
+                            let piece_char = match kind {
+                                PieceKind::Pawn => 'p',
+                                PieceKind::Knight => 'n',
+                                PieceKind::Bishop => 'b',
+                                PieceKind::Rook => 'r',
+                                PieceKind::Queen => 'q',
+                                PieceKind::King => 'k',
+                            };
+
+                            match color {
+                                Color::White => piece_char.to_ascii_uppercase(),
+                                Color::Black => piece_char,
+                            }
+                        }
+                    })
+                    .collect::<String>()
+            })
+            .join("/")
+    }
 }
 
 impl FromStr for Board {
@@ -261,6 +305,35 @@ pub struct MoveMessage {
     board: Board,
 }
 
+impl MoveMessage {
+    /// Serialize excluding message identifier and padding.
+    fn serialize(&self) -> String {
+        format!(
+            "{}{}{}:{}:{}",
+            self.source.to_string(true),
+            self.dest.to_string(true),
+            match self.promotion {
+                None => '0',
+                Some(kind) => match kind {
+                    PieceKind::Pawn => 'p',
+                    PieceKind::Knight => 'n',
+                    PieceKind::Bishop => 'b',
+                    PieceKind::Rook => 'r',
+                    PieceKind::Queen => 'q',
+                    PieceKind::King => 'k',
+                },
+            },
+            match self.phase {
+                GamePhase::Ongoing => "0-0",
+                GamePhase::WhiteWin => "1-0",
+                GamePhase::BlackWin => "0-1",
+                GamePhase::Draw => "1-1",
+            },
+            self.board.serialize()
+        )
+    }
+}
+
 impl FromStr for MoveMessage {
     type Err = ParseError;
 
@@ -297,7 +370,7 @@ impl FromStr for MoveMessage {
                 else {
                     return Err(ParseError::InvalidMove(move_str.to_owned()));
                 };
-                
+
                 let promotion = match promotion_char.to_ascii_lowercase() {
                     '0' => None,
                     'p' => Some(PieceKind::Pawn),
@@ -308,7 +381,6 @@ impl FromStr for MoveMessage {
                     'k' => Some(PieceKind::King),
                     _ => return Err(ParseError::InvalidMove(move_str.to_owned())),
                 };
-                
 
                 (source, dest, promotion)
             }
@@ -342,6 +414,13 @@ impl FromStr for MoveMessage {
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct QuitMessage {
     message: String,
+}
+
+impl QuitMessage {
+    /// Serialize excluding message identifier and padding.
+    pub fn serialize(&self) -> String {
+        self.message.clone()
+    }
 }
 
 impl FromStr for QuitMessage {
@@ -378,5 +457,19 @@ impl Message {
             "ChessQUIT" => Ok(Self::Quit(message.rest.parse()?)),
             _ => Err(ParseError::InvalidMessageId(message.identifier.to_owned())),
         }
+    }
+
+    pub fn serialize(&self) -> [u8; 128] {
+        let (id, message) = match self {
+            Self::Move(message) => ("ChessMOVE", message.serialize()),
+            Self::Quit(message) => ("ChessQUIT", message.serialize()),
+        };
+
+        let result_without_padding = format!("{}:{}:", id, message);
+
+        let mut buffer = ['0' as u8; 128];
+        buffer[0..result_without_padding.len()].copy_from_slice(result_without_padding.as_bytes());
+
+        buffer
     }
 }

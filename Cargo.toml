@@ -7,4 +7,5 @@ edition = "2024"
 chess = { git = "https://github.com/INDA25PlusPlus/sofiefu-chess.git"}
 colors-transform = "0.2.11"
 ggez = "0.9.3"
+itertools = "0.14.0"
 resvg = "0.45.1"

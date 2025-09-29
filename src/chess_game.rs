@@ -101,6 +101,23 @@ impl Position {
             _ => None,
         }
     }
+
+    pub fn to_string(&self, uppercase: bool) -> String {
+        let column = char::from_digit((self.column.0 as u32) + 10, 18)
+            .expect("Position to hold value in valid range");
+        let row = char::from_digit(self.row.0 as u32 + 1, 10)
+            .expect("Position to hold value in valid range");
+
+        format!(
+            "{}{}",
+            if uppercase {
+                column.to_ascii_uppercase()
+            } else {
+                column
+            },
+            row
+        )
+    }
 }
 
 impl From<Position> for glam::Vec2 {
