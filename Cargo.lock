@@ -405,7 +405,7 @@ checksum = "613afe47fcd5fac7ccf1db93babcb082c5994d996f20b8b159f2ad1658eb5724"
 [[package]]
 name = "chess"
 version = "0.1.0"
-source = "git+https://github.com/INDA25PlusPlus/sofiefu-chess.git#36d0a693c86a3b21c00a6b182e7d20921cad8a75"
+source = "git+https://github.com/INDA25PlusPlus/sofiefu-chess.git#86f6b2a25ec6258b4aa4815be12e743da05efe20"
 dependencies = [
  "once_cell",
 ]
