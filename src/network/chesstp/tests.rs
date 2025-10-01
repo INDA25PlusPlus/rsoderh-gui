@@ -152,7 +152,7 @@ fn message_parse_move_black_won() {
             source: Position::parse("e2").unwrap(),
             dest: Position::parse("e4").unwrap(),
             promotion: None,
-            phase: GamePhase::BlackWin,
+            phase: GamePhase::Win(Color::Black),
             board: chess::game::game_state::new().into()
         }))
     )
@@ -168,7 +168,7 @@ fn message_parse_move_promotion() {
             source: Position::parse("e2").unwrap(),
             dest: Position::parse("e4").unwrap(),
             promotion: Some(PieceKind::King),
-            phase: GamePhase::WhiteWin,
+            phase: GamePhase::Win(Color::White),
             board: chess::game::game_state::new().into()
         }))
     )
@@ -193,7 +193,7 @@ fn message_serialize_move_white_win() {
         source: Position::parse("e2").unwrap(),
         dest: Position::parse("e4").unwrap(),
         promotion: None,
-        phase: GamePhase::WhiteWin,
+        phase: GamePhase::Win(Color::White),
         board: chess::game::game_state::new().into(),
     });
 
@@ -206,7 +206,7 @@ fn message_serialize_move_black_win() {
         source: Position::parse("e2").unwrap(),
         dest: Position::parse("e4").unwrap(),
         promotion: None,
-        phase: GamePhase::BlackWin,
+        phase: GamePhase::Win(Color::Black),
         board: chess::game::game_state::new().into(),
     });
 

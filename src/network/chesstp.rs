@@ -62,8 +62,7 @@ fn split_message(buffer: &'_ [u8; 128]) -> Result<RawMessage<'_>, ParseError> {
 #[derive(Debug, PartialEq, Eq, Clone, Copy)]
 pub enum GamePhase {
     Ongoing,
-    WhiteWin,
-    BlackWin,
+    Win(Color),
     Draw,
 }
 
@@ -325,8 +324,8 @@ impl MoveMessage {
             },
             match self.phase {
                 GamePhase::Ongoing => "0-0",
-                GamePhase::WhiteWin => "1-0",
-                GamePhase::BlackWin => "0-1",
+                GamePhase::Win(Color::White) => "1-0",
+                GamePhase::Win(Color::Black) => "0-1",
                 GamePhase::Draw => "1-1",
             },
             self.board.serialize()
@@ -390,8 +389,8 @@ impl FromStr for MoveMessage {
         // Parse game phase
         let phase = match phase_str {
             "0-0" => GamePhase::Ongoing,
-            "1-0" => GamePhase::WhiteWin,
-            "0-1" => GamePhase::BlackWin,
+            "1-0" => GamePhase::Win(Color::White),
+            "0-1" => GamePhase::Win(Color::Black),
             "1-1" => GamePhase::Draw,
             _ => return Err(ParseError::InvalidGamePhase(phase_str.to_owned())),
         };

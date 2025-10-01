@@ -315,8 +315,8 @@ impl ButtonSpecialization for Square {
             .into_iter()
             .map(|(source, dest)| [source, dest])
             .flatten()
-            .chain(match self.state.borrow().phase {
-                GamePhase::SelectDest(source) => Some(source),
+            .chain(match self.state.borrow().turn_phase {
+                TurnPhase::SelectDest(source) => Some(source),
                 _ => None,
             })
             .any(|square| self.position == square)
@@ -334,7 +334,7 @@ impl ButtonSpecialization for Square {
         }
 
         // Draw potential destination highlight.
-        let phase = self.state.borrow().phase;
+        let phase = self.state.borrow().turn_phase;
         let is_potential_dest = phase.source_square().is_some_and(|source| {
             self.state
                 .borrow_mut()
@@ -502,7 +502,7 @@ impl BoardWrapper {
 
 /// The phase of an ongoing turn, or if the game isn't active (TODO: implement game over state).
 #[derive(Clone, Copy, PartialEq, Eq, Debug)]
-enum GamePhase {
+enum TurnPhase {
     SelectSource,
     /// When a piece is being moved and a source square has been selected.
     SelectDest(Position),
@@ -510,7 +510,7 @@ enum GamePhase {
     WaitingForRemote,
 }
 
-impl GamePhase {
+impl TurnPhase {
     pub fn source_square(&self) -> Option<Position> {
         match self {
             Self::SelectDest(square) => Some(*square),
@@ -525,7 +525,8 @@ struct GameState {
     /// as the source.
     /// Information about the last half move. Contains the source and destination squares.
     pub last_move: Option<(Position, Position)>,
-    pub phase: GamePhase,
+    pub turn_phase: TurnPhase,
+    pub game_phase: chesstp::GamePhase,
     pub connection: network::GameConnection,
 }
 
@@ -534,19 +535,23 @@ impl GameState {
         Self {
             board,
             last_move: None,
-            phase: match connection {
+            turn_phase: match connection {
                 network::GameConnection::Remote(network::ConnectionType::Server, _, _) => {
-                    GamePhase::WaitingForRemote
+                    TurnPhase::WaitingForRemote
                 }
-                _ => GamePhase::SelectSource,
+                _ => TurnPhase::SelectSource,
             },
+            game_phase: chesstp::GamePhase::Ongoing,
             connection,
         }
     }
 
     pub fn select_square(&mut self, square: Position) {
-        match self.phase {
-            GamePhase::SelectSource => {
+        if self.game_phase != chesstp::GamePhase::Ongoing {
+            return;
+        }
+        match self.turn_phase {
+            TurnPhase::SelectSource => {
                 if self
                     .board
                     .at(square)
@@ -555,41 +560,44 @@ impl GameState {
                     return;
                 }
 
-                self.phase = GamePhase::SelectDest(square);
+                self.turn_phase = TurnPhase::SelectDest(square);
             }
-            GamePhase::SelectDest(source) => {
+            TurnPhase::SelectDest(source) => {
                 match self.board.make_move(source, square) {
                     Err(error) => {
                         // Interrpret as canceling the move.
                         println!("Invalid move: {:?}", error);
 
-                        self.phase = GamePhase::SelectSource;
+                        self.turn_phase = TurnPhase::SelectSource;
                     }
                     Ok(outcome) => {
                         dbg!(outcome);
 
+                        if outcome == MoveOutcome::Checkmate {
+                            self.game_phase = chesstp::GamePhase::Win(self.board.turn().opposite());
+                        }
+
                         self.last_move = Some((source, square));
-                        self.phase = match self.connection {
-                            network::GameConnection::Local => GamePhase::SelectSource,
+                        self.turn_phase = match self.connection {
+                            network::GameConnection::Local => TurnPhase::SelectSource,
                             network::GameConnection::Remote(_, _, ref mut stream) => {
                                 let move_message = chesstp::MoveMessage {
                                     source,
                                     dest: square,
                                     // My game doesn't support promotion. :)
                                     promotion: None,
-                                    // TODO: support phases.
-                                    phase: chesstp::GamePhase::Ongoing,
+                                    phase: self.game_phase,
                                     board: self.board.inner().clone().into(),
                                 };
 
                                 stream.write(chesstp::Message::Move(move_message)).unwrap();
-                                GamePhase::WaitingForRemote
+                                TurnPhase::WaitingForRemote
                             }
                         };
                     }
                 }
             }
-            GamePhase::WaitingForRemote => {}
+            TurnPhase::WaitingForRemote => {}
         }
     }
 
@@ -616,7 +624,8 @@ impl GameState {
                         message.board.update_game(self.board.inner_mut());
                         self.last_move = Some((message.source, message.dest));
 
-                        self.phase = GamePhase::SelectSource;
+                        self.turn_phase = TurnPhase::SelectSource;
+                        self.game_phase = message.phase;
                     }
                     None => break,
                 }
@@ -629,8 +638,6 @@ pub struct GameUi {
     state: Arc<RefCell<GameState>>,
     board_bounds: graphics::Rect,
     square_buttons: [ui::Button; 64],
-    white_label: graphics::Text,
-    black_label: graphics::Text,
 }
 
 impl GameUi {
@@ -679,52 +686,9 @@ impl GameUi {
             .ok()
             .expect("there are 64 position");
 
-        let mut white_label = graphics::Text::new("White");
-        white_label.set_scale(graphics::PxScale::from(35.0));
-        // .set_bounds(glam::vec2(board_bounds.w, BOARD_Y_MARGIN))
-        // .set_layout(graphics::TextLayout {
-        //     h_align: graphics::TextAlign::Begin,
-        //     v_align: graphics::TextAlign::Middle,
-        // });
-        let mut black_label = graphics::Text::new("Black");
-        black_label.set_scale(graphics::PxScale::from(35.0));
-        // .set_bounds(glam::vec2(board_bounds.w, BOARD_Y_MARGIN))
-        // .set_layout(graphics::TextLayout {
-        //     h_align: graphics::TextAlign::Begin,
-        //     v_align: graphics::TextAlign::Middle,
-        // });
-        // let white_label = TextLabel::new(
-        //     ctx,
-        //     "White",
-        //     glam::vec2(
-        //         bounds.left(),
-        //         bounds.top() + BOARD_Y_OFFSET - BOARD_Y_OFFSET / 2.0,
-        //     ),
-        //     bounds.w,
-        //     10.0,
-        //     BOARD_CORNER_RADIUS,
-        //     PALETTE.button,
-        //     graphics::Color::WHITE,
-        // )?;
-        // let black_label = TextLabel::new(
-        //     ctx,
-        //     "Black",
-        //     glam::vec2(
-        //         bounds.left(),
-        //         bounds.bottom() + BOARD_Y_OFFSET + BOARD_Y_OFFSET / 2.0,
-        //     ),
-        //     bounds.w,
-        //     10.0,
-        //     BOARD_CORNER_RADIUS,
-        //     PALETTE.button,
-        //     graphics::Color::WHITE,
-        // )?;
-
         Ok(Self {
             state,
             square_buttons: *components,
-            white_label,
-            black_label,
             board_bounds,
         })
     }
@@ -765,24 +729,25 @@ impl GameUi {
         Self::size();
 
         // Draw player labels.
-        self.black_label.clear();
-        self.black_label.add(match self.state.borrow().connection {
-            network::GameConnection::Remote(network::ConnectionType::Server, _, _) => "Black (you)",
-            _ => "Black",
-        });
-        self.white_label.clear();
-        self.white_label.add(match self.state.borrow().connection {
+        let mut white_label = graphics::Text::new(match self.state.borrow().connection {
             network::GameConnection::Remote(network::ConnectionType::Client, _, _) => "White (you)",
             _ => "White",
         });
+        white_label.set_scale(graphics::PxScale::from(35.0));
+        let mut black_label = graphics::Text::new(match self.state.borrow().connection {
+            network::GameConnection::Remote(network::ConnectionType::Server, _, _) => "Black (you)",
+            _ => "Black",
+        });
+        black_label.set_scale(graphics::PxScale::from(35.0));
+
         canvas.draw(
-            &self.black_label,
+            &black_label,
             graphics::DrawParam::new()
                 .dest(self.board_bounds.top_left() + glam::vec2(10.0, -35.0 - 5.0) + offset)
                 .color(PALETTE.board_square_black),
         );
         canvas.draw(
-            &self.white_label,
+            &white_label,
             graphics::DrawParam::new()
                 .dest(self.board_bounds.bottom_left() + glam::vec2(10.0, 5.0 + 3.0) + offset)
                 .color(PALETTE.board_square_white),
@@ -796,46 +761,110 @@ impl GameUi {
         };
         static SIDE_BAR_TOP_MARGIN: f32 = 30.0;
 
-        // Draw turn display.
-        let (turn_str, turn_color) = match self.state.borrow().board.turn() {
-            Color::White => ("White", PALETTE.board_square_white),
-            Color::Black => ("Black", PALETTE.board_square_black),
-        };
-        let mut turn_text = graphics::Text::new(turn_str);
-        turn_text
-            .set_scale(graphics::PxScale::from(80.0))
-            .set_layout(graphics::TextLayout {
-                h_align: graphics::TextAlign::Middle,
-                v_align: graphics::TextAlign::Begin,
-            });
+        // Draw turn/game phase display.
+        match self.state.borrow().game_phase {
+            chesstp::GamePhase::Ongoing => {
+                let (turn_str, turn_color) = match self.state.borrow().board.turn() {
+                    Color::White => ("White", PALETTE.board_square_white),
+                    Color::Black => ("Black", PALETTE.board_square_black),
+                };
+                let mut turn_text = graphics::Text::new(turn_str);
+                turn_text
+                    .set_scale(graphics::PxScale::from(80.0))
+                    .set_layout(graphics::TextLayout {
+                        h_align: graphics::TextAlign::Middle,
+                        v_align: graphics::TextAlign::Begin,
+                    });
 
-        canvas.draw(
-            &turn_text,
-            graphics::DrawParam::new().color(turn_color).dest(
-                glam::vec2(
-                    side_bar_bounds.center().x,
-                    side_bar_bounds.top() + SIDE_BAR_TOP_MARGIN,
-                ) + offset,
-            ),
-        );
+                canvas.draw(
+                    &turn_text,
+                    graphics::DrawParam::new().color(turn_color).dest(
+                        glam::vec2(
+                            side_bar_bounds.center().x,
+                            side_bar_bounds.top() + SIDE_BAR_TOP_MARGIN,
+                        ) + offset,
+                    ),
+                );
 
-        let mut subtitle_text = graphics::Text::new("to move");
-        subtitle_text
-            .set_scale(graphics::PxScale::from(30.0))
-            .set_layout(graphics::TextLayout {
-                h_align: graphics::TextAlign::Middle,
-                v_align: graphics::TextAlign::Begin,
-            });
+                let mut subtitle_text = graphics::Text::new("to move");
+                subtitle_text
+                    .set_scale(graphics::PxScale::from(30.0))
+                    .set_layout(graphics::TextLayout {
+                        h_align: graphics::TextAlign::Middle,
+                        v_align: graphics::TextAlign::Begin,
+                    });
 
-        canvas.draw(
-            &subtitle_text,
-            graphics::DrawParam::new().color(PALETTE.text_subtle).dest(
-                glam::vec2(
-                    side_bar_bounds.center().x,
-                    side_bar_bounds.top() + SIDE_BAR_TOP_MARGIN + 80.0,
-                ) + offset,
-            ),
-        );
+                canvas.draw(
+                    &subtitle_text,
+                    graphics::DrawParam::new().color(PALETTE.text_subtle).dest(
+                        glam::vec2(
+                            side_bar_bounds.center().x,
+                            side_bar_bounds.top() + SIDE_BAR_TOP_MARGIN + 80.0,
+                        ) + offset,
+                    ),
+                );
+            }
+            chesstp::GamePhase::Win(player) => {
+                let (player_str, player_color) = match player {
+                    Color::White => ("White", PALETTE.board_square_white),
+                    Color::Black => ("Black", PALETTE.board_square_black),
+                };
+                let mut player_text = graphics::Text::new(player_str);
+                player_text
+                    .set_scale(graphics::PxScale::from(80.0))
+                    .set_layout(graphics::TextLayout {
+                        h_align: graphics::TextAlign::Middle,
+                        v_align: graphics::TextAlign::Begin,
+                    });
+
+                canvas.draw(
+                    &player_text,
+                    graphics::DrawParam::new().color(player_color).dest(
+                        glam::vec2(
+                            side_bar_bounds.center().x,
+                            side_bar_bounds.top() + SIDE_BAR_TOP_MARGIN,
+                        ) + offset,
+                    ),
+                );
+
+                let mut subtitle_text = graphics::Text::new("won");
+                subtitle_text
+                    .set_scale(graphics::PxScale::from(30.0))
+                    .set_layout(graphics::TextLayout {
+                        h_align: graphics::TextAlign::Middle,
+                        v_align: graphics::TextAlign::Begin,
+                    });
+
+                canvas.draw(
+                    &subtitle_text,
+                    graphics::DrawParam::new().color(PALETTE.text_subtle).dest(
+                        glam::vec2(
+                            side_bar_bounds.center().x,
+                            side_bar_bounds.top() + SIDE_BAR_TOP_MARGIN + 80.0,
+                        ) + offset,
+                    ),
+                );
+            }
+            chesstp::GamePhase::Draw => {
+                let mut draw_text = graphics::Text::new("Draw");
+                draw_text
+                    .set_scale(graphics::PxScale::from(80.0))
+                    .set_layout(graphics::TextLayout {
+                        h_align: graphics::TextAlign::Middle,
+                        v_align: graphics::TextAlign::Begin,
+                    });
+
+                canvas.draw(
+                    &draw_text,
+                    graphics::DrawParam::new().color(PALETTE.text_neutral).dest(
+                        glam::vec2(
+                            side_bar_bounds.center().x,
+                            side_bar_bounds.top() + SIDE_BAR_TOP_MARGIN,
+                        ) + offset,
+                    ),
+                );
+            }
+        }
 
         // Draw connection info
         match self.state.borrow().connection {

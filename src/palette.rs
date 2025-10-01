@@ -18,6 +18,7 @@ pub struct Palette {
     pub button_hover: graphics::Color,
     pub button_active: graphics::Color,
     pub text_subtle: graphics::Color,
+    pub text_neutral: graphics::Color,
 }
 
 impl Default for Palette {
@@ -48,6 +49,7 @@ impl Default for Palette {
             button_hover: convert_color(Rgb::from_hex_str("#393734").unwrap()),
             button_active: convert_color(Rgb::from_hex_str("#1b1a18").unwrap()),
             text_subtle: convert_color(Rgb::from_hex_str("#aea696").unwrap()),
+            text_neutral: convert_color(Rgb::from_hex_str("#cbc1b4").unwrap()),
         }
     }
 }
