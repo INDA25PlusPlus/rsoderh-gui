@@ -750,7 +750,7 @@ impl GameUi {
     }
 
     pub fn draw(
-        &self,
+        &mut self,
         ctx: &mut Context,
         canvas: &mut graphics::Canvas,
         offset: glam::Vec2,
@@ -765,6 +765,16 @@ impl GameUi {
         Self::size();
 
         // Draw player labels.
+        self.black_label.clear();
+        self.black_label.add(match self.state.borrow().connection {
+            network::GameConnection::Remote(network::ConnectionType::Server, _, _) => "Black (you)",
+            _ => "Black",
+        });
+        self.white_label.clear();
+        self.white_label.add(match self.state.borrow().connection {
+            network::GameConnection::Remote(network::ConnectionType::Client, _, _) => "White (you)",
+            _ => "White",
+        });
         canvas.draw(
             &self.black_label,
             graphics::DrawParam::new()
@@ -826,6 +836,76 @@ impl GameUi {
                 ) + offset,
             ),
         );
+
+        // Draw connection info
+        match self.state.borrow().connection {
+            network::GameConnection::Remote(connection_type, remote_addr, _) => {
+                let mut type_text = graphics::Text::new(match connection_type {
+                    network::ConnectionType::Server => "running server",
+                    network::ConnectionType::Client => "running client",
+                });
+                type_text
+                    .set_scale(graphics::PxScale::from(30.0))
+                    .set_layout(graphics::TextLayout {
+                        h_align: graphics::TextAlign::Middle,
+                        v_align: graphics::TextAlign::Begin,
+                    });
+
+                let mut connection_text = graphics::Text::new("connected to");
+                connection_text
+                    .set_scale(graphics::PxScale::from(30.0))
+                    .set_layout(graphics::TextLayout {
+                        h_align: graphics::TextAlign::Middle,
+                        v_align: graphics::TextAlign::Begin,
+                    });
+
+                let mut addr_text = graphics::Text::new(match connection_type {
+                    network::ConnectionType::Server => format!("{}", remote_addr.ip()),
+                    network::ConnectionType::Client => format!("{}", remote_addr),
+                });
+                addr_text
+                    .set_scale(graphics::PxScale::from(30.0))
+                    .set_layout(graphics::TextLayout {
+                        h_align: graphics::TextAlign::Middle,
+                        v_align: graphics::TextAlign::Begin,
+                    });
+
+                canvas.draw(
+                    &type_text,
+                    graphics::DrawParam::new()
+                        .color(PALETTE.board_square_white)
+                        .dest(
+                            glam::vec2(
+                                side_bar_bounds.center().x,
+                                side_bar_bounds.bottom() - SIDE_BAR_TOP_MARGIN - 30.0 - 30.0,
+                            ) + offset,
+                        ),
+                );
+
+                canvas.draw(
+                    &connection_text,
+                    graphics::DrawParam::new()
+                        .color(PALETTE.board_square_white)
+                        .dest(
+                            glam::vec2(
+                                side_bar_bounds.center().x,
+                                side_bar_bounds.bottom() - SIDE_BAR_TOP_MARGIN - 30.0,
+                            ) + offset,
+                        ),
+                );
+
+                canvas.draw(
+                    &addr_text,
+                    graphics::DrawParam::new().color(PALETTE.text_subtle).dest(
+                        glam::vec2(
+                            side_bar_bounds.center().x,
+                            side_bar_bounds.bottom() - SIDE_BAR_TOP_MARGIN,
+                        ) + offset,
+                    ),
+                );
+            }
+            _ => {}
+        }
 
         Ok(())
     }
