@@ -5,6 +5,7 @@ use ggez::{Context, GameResult, glam, graphics, mint};
 use crate::{
     assets::Assets,
     chess_graphics::{BorderRadii, RoundedRectangle, SizedImage},
+    network::{self, chesstp},
     palette::PALETTE,
     rect::RectUtils,
     ui::{self, ButtonSpecialization, PressState},
@@ -452,6 +453,12 @@ impl BoardWrapper {
             _ => unreachable!(),
         }
     }
+    pub fn set_turn(&mut self, player: Color) {
+        self.0.turn = match player {
+            Color::White => 'w',
+            Color::Black => 'b',
+        }
+    }
 
     pub fn valid_moves(&mut self, square: Position) -> impl Iterator<Item = Position> {
         self.0
@@ -484,6 +491,13 @@ impl BoardWrapper {
             Outcome::Checked => Err(MoveError::Checked),
         }
     }
+
+    pub fn inner(&self) -> &chess::game::game_state {
+        &self.0
+    }
+    pub fn inner_mut(&mut self) -> &mut chess::game::game_state {
+        &mut self.0
+    }
 }
 
 /// The phase of an ongoing turn, or if the game isn't active (TODO: implement game over state).
@@ -492,6 +506,8 @@ enum GamePhase {
     SelectSource,
     /// When a piece is being moved and a source square has been selected.
     SelectDest(Position),
+    /// Waiting for remote player to perform their move. Only valid if connected to a remote.
+    WaitingForRemote,
 }
 
 impl GamePhase {
@@ -510,14 +526,21 @@ struct GameState {
     /// Information about the last half move. Contains the source and destination squares.
     pub last_move: Option<(Position, Position)>,
     pub phase: GamePhase,
+    pub connection: network::GameConnection,
 }
 
 impl GameState {
-    pub fn new(board: BoardWrapper) -> Self {
+    pub fn new(board: BoardWrapper, connection: network::GameConnection) -> Self {
         Self {
             board,
             last_move: None,
-            phase: GamePhase::SelectSource,
+            phase: match connection {
+                network::GameConnection::Remote(network::ConnectionType::Server, _, _) => {
+                    GamePhase::WaitingForRemote
+                }
+                _ => GamePhase::SelectSource,
+            },
+            connection,
         }
     }
 
@@ -546,10 +569,58 @@ impl GameState {
                         dbg!(outcome);
 
                         self.last_move = Some((source, square));
-                        self.phase = GamePhase::SelectSource;
+                        self.phase = match self.connection {
+                            network::GameConnection::Local => GamePhase::SelectSource,
+                            network::GameConnection::Remote(_, _, ref mut stream) => {
+                                let move_message = chesstp::MoveMessage {
+                                    source,
+                                    dest: square,
+                                    // My game doesn't support promotion. :)
+                                    promotion: None,
+                                    // TODO: support phases.
+                                    phase: chesstp::GamePhase::Ongoing,
+                                    board: self.board.inner().clone().into(),
+                                };
+
+                                stream.write(chesstp::Message::Move(move_message)).unwrap();
+                                GamePhase::WaitingForRemote
+                            }
+                        };
                     }
                 }
             }
+            GamePhase::WaitingForRemote => {}
+        }
+    }
+
+    /// Function which runs general instantenous state updates. Is meant to be called frequently in
+    /// some update loop.
+    pub fn update(&mut self) {
+        match self.connection {
+            network::GameConnection::Local => {}
+            network::GameConnection::Remote(type_, _, ref mut stream) => loop {
+                match stream.accept().unwrap() {
+                    Some(chesstp::Message::Quit(message)) => {
+                        if &message.message != "" {
+                            println!("Remote quit")
+                        } else {
+                            println!("Remote quit with message: {}", &message.message)
+                        }
+                    }
+                    Some(chesstp::Message::Move(message)) => {
+                        self.board.set_turn(match type_ {
+                            network::ConnectionType::Server => Color::Black,
+                            network::ConnectionType::Client => Color::White,
+                        });
+
+                        message.board.update_game(self.board.inner_mut());
+                        self.last_move = Some((message.source, message.dest));
+
+                        self.phase = GamePhase::SelectSource;
+                    }
+                    None => break,
+                }
+            },
         }
     }
 }
@@ -563,10 +634,16 @@ pub struct GameUi {
 }
 
 impl GameUi {
-    pub fn new(_ctx: &mut Context, top_left: glam::Vec2, assets: &Arc<Assets>) -> GameResult<Self> {
-        let state = Arc::new(RefCell::new(GameState::new(BoardWrapper::new(
-            chess::game::game_state::new(),
-        ))));
+    pub fn new(
+        _ctx: &mut Context,
+        top_left: glam::Vec2,
+        assets: &Arc<Assets>,
+        connection: network::GameConnection,
+    ) -> GameResult<Self> {
+        let state = Arc::new(RefCell::new(GameState::new(
+            BoardWrapper::new(chess::game::game_state::new()),
+            connection,
+        )));
         let board_bounds = graphics::Rect {
             x: top_left.x,
             y: top_left.y + BOARD_Y_MARGIN,
@@ -751,6 +828,10 @@ impl GameUi {
         );
 
         Ok(())
+    }
+
+    pub fn update(&mut self) {
+        self.state.borrow_mut().update();
     }
 
     pub fn size() -> glam::Vec2 {

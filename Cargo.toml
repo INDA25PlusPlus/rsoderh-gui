@@ -4,8 +4,10 @@ version = "0.1.0"
 edition = "2024"
 
 [dependencies]
+anyhow = "1.0.100"
 chess = { git = "https://github.com/INDA25PlusPlus/sofiefu-chess.git"}
 colors-transform = "0.2.11"
 ggez = "0.9.3"
+inquire = "0.9.1"
 itertools = "0.14.0"
 resvg = "0.45.1"

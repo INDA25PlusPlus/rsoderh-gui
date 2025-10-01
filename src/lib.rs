@@ -12,21 +12,25 @@ use crate::{assets::Assets, chess_game::GameUi};
 mod assets;
 pub mod chess_game;
 pub mod chess_graphics;
-mod network;
+pub mod network;
 pub mod palette;
 mod rect;
 pub mod ui;
 
 pub struct MainState {
     game: GameUi,
+    // connection: Arc<RefCell<network::GameConnection>>,
     // assets: Arc<Assets>,
 }
 
 impl MainState {
-    pub fn new(ctx: &mut ggez::Context) -> GameResult<MainState> {
+    pub fn new(
+        ctx: &mut ggez::Context,
+        connection: network::GameConnection,
+    ) -> GameResult<MainState> {
         let assets = Arc::new(Assets::new(ctx));
         let state = MainState {
-            game: GameUi::new(ctx, glam::vec2(10.0, 10.0), &assets)?,
+            game: GameUi::new(ctx, glam::vec2(10.0, 10.0), &assets, connection)?,
             // assets,
         };
 
@@ -64,6 +68,9 @@ impl event::EventHandler<GameError> for MainState {
         ctx.gfx
             .window()
             .set_min_inner_size(Some(PhysicalSize::new(min_size.x, min_size.y)));
+
+        self.game.update();
+
         Ok(())
     }
 

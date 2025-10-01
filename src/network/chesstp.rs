@@ -298,11 +298,11 @@ impl From<chess::game::game_state> for Board {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct MoveMessage {
-    source: Position,
-    dest: Position,
-    promotion: Option<PieceKind>,
-    phase: GamePhase,
-    board: Board,
+    pub source: Position,
+    pub dest: Position,
+    pub promotion: Option<PieceKind>,
+    pub phase: GamePhase,
+    pub board: Board,
 }
 
 impl MoveMessage {
@@ -413,7 +413,7 @@ impl FromStr for MoveMessage {
 
 #[derive(Debug, PartialEq, Eq, Clone)]
 pub struct QuitMessage {
-    message: String,
+    pub message: String,
 }
 
 impl QuitMessage {
@@ -443,7 +443,7 @@ impl FromStr for QuitMessage {
 }
 
 #[derive(Debug, PartialEq, Eq, Clone)]
-enum Message {
+pub enum Message {
     Move(MoveMessage),
     Quit(QuitMessage),
 }
