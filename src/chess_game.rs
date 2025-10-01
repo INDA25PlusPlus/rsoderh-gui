@@ -225,9 +225,9 @@ impl ButtonSpecialization for Square {
         };
 
         let square_color = if (self.position.column() + self.position.row()) % 2 == 0 {
-            Color::White
-        } else {
             Color::Black
+        } else {
+            Color::White
         };
 
         let bg_color = to_actual_color(square_color);
