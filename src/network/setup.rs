@@ -1,7 +1,10 @@
 //! Contains functions for letting the user configure the application setup (i.e. local vs server vs
 //! client) via a CLI interface.
 
-use std::{fmt::Display, net::SocketAddr};
+use std::{
+    fmt::Display,
+    net::{Ipv4Addr, SocketAddr, SocketAddrV4},
+};
 
 #[derive(Debug, Copy, Clone)]
 pub enum NetworkMode {
@@ -43,6 +46,7 @@ pub fn prompt_network_config() -> Result<NetworkConfig, inquire::InquireError> {
                 .with_placeholder("0.0.0.0:3000")
                 .with_parser(&|string| string.parse().map_err(|_| ()))
                 .with_error_message("Please type a valid IP and port.")
+                .with_default(SocketAddrV4::new(Ipv4Addr::UNSPECIFIED, 3000).into())
                 .prompt()?;
 
             Ok(NetworkConfig::Client(addr))
@@ -52,6 +56,7 @@ pub fn prompt_network_config() -> Result<NetworkConfig, inquire::InquireError> {
                 .with_placeholder("3000")
                 .with_parser(&|string| string.parse().map_err(|_| ()))
                 .with_error_message("Please type an integer 0-65535 (inclusive).")
+                .with_default(3000)
                 .prompt()?;
 
             Ok(NetworkConfig::Server(port))
