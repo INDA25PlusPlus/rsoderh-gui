@@ -1,6 +1,6 @@
 use std::{
     io::{self, BufRead, BufReader, Read, Write},
-    net::{SocketAddr, TcpStream},
+    net::{self, SocketAddr, TcpStream},
 };
 
 use anyhow::anyhow;
@@ -69,6 +69,11 @@ impl ChesstpMessageStream {
             return Err(anyhow!("Could only read {} bytes of message", written_len));
         }
 
+        Ok(())
+    }
+
+    pub fn close(&mut self) -> anyhow::Result<()> {
+        self.writer.shutdown(net::Shutdown::Both)?;
         Ok(())
     }
 }

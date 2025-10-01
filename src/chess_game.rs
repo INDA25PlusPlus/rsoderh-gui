@@ -834,6 +834,22 @@ impl GameUi {
         self.state.borrow_mut().update();
     }
 
+    pub fn quit_event(&mut self) -> anyhow::Result<()> {
+        match self.state.borrow_mut().connection {
+            network::GameConnection::Local => {}
+            network::GameConnection::Remote(_, _, ref mut chesstp_message_stream) => {
+                let message = chesstp::QuitMessage {
+                    message: "User exited".to_owned(),
+                };
+
+                chesstp_message_stream.write(chesstp::Message::Quit(message))?;
+                chesstp_message_stream.close()?;
+            }
+        };
+
+        Ok(())
+    }
+
     pub fn size() -> glam::Vec2 {
         /// If I don't add this to the height the text at the bottom is cut off slightly, and I
         /// can't be bothered to fix it.

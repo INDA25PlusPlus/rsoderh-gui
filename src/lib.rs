@@ -82,6 +82,16 @@ impl event::EventHandler<GameError> for MainState {
         canvas.finish(ctx)
     }
 
+    fn quit_event(&mut self, _ctx: &mut ggez::Context) -> Result<bool, GameError> {
+        println!("Quiting...");
+
+        self.game.quit_event().unwrap_or_else(|error| {
+            println!("Sending quit failed: {}", error);
+        });
+
+        Ok(false)
+    }
+
     fn mouse_button_down_event(
         &mut self,
         ctx: &mut ggez::Context,
