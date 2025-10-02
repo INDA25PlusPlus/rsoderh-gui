@@ -232,7 +232,14 @@ impl ButtonSpecialization for Square {
 
         let bg_color = to_actual_color(square_color);
 
-        let corner_radii = match (self.position.column(), self.position.row()) {
+        let row = match self.state.borrow().connection {
+            network::GameConnection::Remote(network::ConnectionType::Server, _, _) => {
+                7 - self.position.row()
+            }
+            _ => self.position.row(),
+        };
+
+        let corner_radii = match (self.position.column(), row) {
             (0, 7) => BorderRadii {
                 top_left: BOARD_CORNER_RADIUS,
                 ..BorderRadii::zero()
@@ -647,6 +654,11 @@ impl GameUi {
         assets: &Arc<Assets>,
         connection: network::GameConnection,
     ) -> GameResult<Self> {
+        let flip_board = match connection {
+            network::GameConnection::Remote(network::ConnectionType::Server, _, _) => true,
+            _ => false,
+        };
+
         let state = Arc::new(RefCell::new(GameState::new(
             BoardWrapper::new(chess::game::game_state::new()),
             connection,
@@ -666,8 +678,11 @@ impl GameUi {
                         .expect("indices are < 8");
 
                     let position_indices: glam::Vec2 = position.into();
-                    let position_indices =
-                        (glam::vec2(0.0, 7.0) - position_indices) * glam::vec2(-1.0, 1.0);
+                    let position_indices = if flip_board {
+                        position_indices
+                    } else {
+                        (glam::vec2(0.0, 7.0) - position_indices) * glam::vec2(-1.0, 1.0)
+                    };
 
                     let mut square_bounds = board_bounds.clone();
                     square_bounds.scale(1.0 / 8.0, 1.0 / 8.0);
@@ -740,17 +755,28 @@ impl GameUi {
         });
         black_label.set_scale(graphics::PxScale::from(35.0));
 
+        let ((top_label, top_color), (bottom_label, bottom_color)) = {
+            let black = (black_label, PALETTE.board_square_black);
+            let white = (white_label, PALETTE.board_square_white);
+            match self.state.borrow().connection {
+                network::GameConnection::Remote(network::ConnectionType::Server, _, _) => {
+                    (white, black)
+                }
+                _ => (black, white),
+            }
+        };
+
         canvas.draw(
-            &black_label,
+            &top_label,
             graphics::DrawParam::new()
                 .dest(self.board_bounds.top_left() + glam::vec2(10.0, -35.0 - 5.0) + offset)
-                .color(PALETTE.board_square_black),
+                .color(top_color),
         );
         canvas.draw(
-            &white_label,
+            &bottom_label,
             graphics::DrawParam::new()
                 .dest(self.board_bounds.bottom_left() + glam::vec2(10.0, 5.0 + 3.0) + offset)
-                .color(PALETTE.board_square_white),
+                .color(bottom_color),
         );
 
         let side_bar_bounds = graphics::Rect {
